@@ -1,0 +1,45 @@
+{
+    "name": "ACQUIT Legal Practice Management",
+    "short_name": "ACQUIT",
+    "description": "State-of-the-art legal practice management with AI-driven intelligence.",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#ffffff",
+    "theme_color": "#4f46e5",
+    "icons": [
+        {
+            "src": "/favicon.svg",
+            "sizes": "any",
+            "type": "image/svg+xml",
+            "purpose": "maskable"
+        }
+    ],
+    "categories": [
+        "productivity",
+        "business"
+    ],
+    "shortcuts": [
+        {
+            "name": "New Matter",
+            "short_name": "New Matter",
+            "url": "/matters",
+            "icons": [
+                {
+                    "src": "/favicon.svg",
+                    "sizes": "any"
+                }
+            ]
+        },
+        {
+            "name": "Search Discovery",
+            "short_name": "Search",
+            "url": "/search",
+            "icons": [
+                {
+                    "src": "/favicon.svg",
+                    "sizes": "any"
+                }
+            ]
+        }
+    ]
+}

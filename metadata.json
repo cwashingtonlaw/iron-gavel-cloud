@@ -1,0 +1,7 @@
+{
+  "name": "CaseFlow - Legal Practice Management",
+  "description": "A modern, AI-powered dashboard for managing legal cases, tasks, and clients, inspired by CaseFlow Manage. Features include case overview, task tracking, and AI-driven case summarization using Gemini.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}

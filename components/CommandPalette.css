@@ -1,0 +1,16 @@
+[cmdk-root] {
+  z-index: 1000;
+}
+
+[cmdk-group-heading] {
+  user-select: none;
+}
+
+[cmdk-item] {
+  cursor: pointer;
+  user-select: none;
+}
+
+[cmdk-item][data-selected="true"] {
+  @apply bg-slate-100 dark:bg-slate-700;
+}
