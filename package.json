@@ -1,6 +1,7 @@
 {
-  "name": "caseflow---legal-practice-management",
+  "name": "iron-gavel-cloud",
   "private": true,
+  "workspaces": ["packages/*", "server"],
   "version": "0.0.0",
   "type": "module",
   "scripts": {
