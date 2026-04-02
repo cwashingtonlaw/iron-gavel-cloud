@@ -1,0 +1,18 @@
+appId: com.cwashingtonlaw.iron-gavel
+productName: Iron Gavel
+directories:
+  output: release
+  buildResources: build
+files:
+  - dist/**/*
+  - electron/**/*
+  - package.json
+mac:
+  category: public.app-category.business
+  target:
+    - dmg
+    - zip
+  darkModeSupport: true
+dmg:
+  title: Iron Gavel
+  artifactName: Iron-Gavel-${version}-mac.${ext}
