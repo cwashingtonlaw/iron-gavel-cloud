@@ -6,6 +6,7 @@ services:
       POSTGRES_USER: irongavel
       POSTGRES_PASSWORD: ${DB_PASSWORD:-irongavel}
       POSTGRES_DB: irongavel
+      POSTGRES_HOST_AUTH_METHOD: trust
     volumes:
       - pgdata:/var/lib/postgresql/data
     ports:
