@@ -1,0 +1,462 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// USERS & AUTH
+// ============================================================================
+
+enum UserRole {
+  Admin
+  Attorney
+  Paralegal
+  Client
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         UserRole
+  defaultRate  Float?
+  avatarUrl    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  sessions              Session[]
+  twoFactorAuth         TwoFactorAuth?
+  assignedTasks         Task[]            @relation("AssignedTo")
+  createdTasks          Task[]            @relation("AssignedBy")
+  timeEntries           TimeEntry[]
+  responsibleMatters    Matter[]          @relation("ResponsibleAttorney")
+  originatingMatters    Matter[]          @relation("OriginatingAttorney")
+  documentVersions      DocumentVersion[]
+  auditLogs             AuditLog[]
+  sentPortalMessages    PortalMessage[]
+  matterAccess          MatterAccess[]
+}
+
+model Session {
+  id         String   @id @default(cuid())
+  userId     String
+  deviceName String?
+  ipAddress  String?
+  userAgent  String?
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model TwoFactorAuth {
+  id          String  @id @default(cuid())
+  userId      String  @unique
+  method      String
+  secret      String?
+  enabled     Boolean @default(false)
+  backupCodes Json?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ============================================================================
+// MATTERS & CONTACTS
+// ============================================================================
+
+enum MatterStatus {
+  Open
+  Closed
+  Pending
+}
+
+enum MatterPermission {
+  Firm
+  Private
+  Selective
+}
+
+enum BillingType {
+  Hourly
+  FlatFee
+  Contingency
+}
+
+model Matter {
+  id                    String           @id @default(cuid())
+  name                  String
+  client                String
+  status                MatterStatus     @default(Open)
+  openDate              DateTime
+  notes                 String           @default("")
+  billingType           BillingType
+  billingRate           Float?
+  billingFee            Float?
+  permissions           MatterPermission @default(Firm)
+  responsibleAttorneyId String?
+  originatingAttorneyId String?
+  practiceArea          String?
+  stageId               String?
+  lastStageChangeDate   DateTime?
+  estimatedValue        Float?
+  trustBalance          Float            @default(0)
+  description           String?
+  location              String?
+  clientReferenceNumber String?
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+
+  recurringEnabled   Boolean   @default(false)
+  recurringFrequency String?
+  recurringAmount    Float?
+  recurringNextDate  DateTime?
+
+  settlementGross        Float?
+  settlementFeePercent   Float?
+  settlementFeeAmount    Float?
+  settlementCosts        Float?
+  settlementMedicalLiens Float?
+  settlementNetToClient  Float?
+  settlementStatus       String?
+  settlementDate         DateTime?
+
+  responsibleAttorney User?            @relation("ResponsibleAttorney", fields: [responsibleAttorneyId], references: [id])
+  originatingAttorney User?            @relation("OriginatingAttorney", fields: [originatingAttorneyId], references: [id])
+  tasks               Task[]
+  documents           Document[]
+  timeEntries         TimeEntry[]
+  expenses            Expense[]
+  invoices            Invoice[]
+  transactions        Transaction[]
+  events              Event[]
+  communications      Communication[]
+  relatedParties      RelatedParty[]
+  matterContacts      MatterContact[]
+  matterAccess        MatterAccess[]
+  portalMessages      PortalMessage[]
+  customFields        Json?
+}
+
+model MatterAccess {
+  id       String @id @default(cuid())
+  matterId String
+  userId   String
+
+  matter Matter @relation(fields: [matterId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([matterId, userId])
+}
+
+enum ContactType {
+  Client
+  Witness
+  Counsel
+  PotentialClient
+}
+
+model Contact {
+  id              String      @id @default(cuid())
+  name            String
+  email           String      @default("")
+  phone           String      @default("")
+  type            ContactType
+  hasPortalAccess Boolean     @default(false)
+  isCompany       Boolean     @default(false)
+  prefix          String?
+  firstName       String?
+  middleName      String?
+  lastName        String?
+  companyName     String?
+  title           String?
+  dob             DateTime?
+  notes           String?
+  tags            Json?
+  value           Float?
+  photoUrl        String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  emails    Json?
+  phones    Json?
+  addresses Json?
+  websites  Json?
+
+  matterContacts  MatterContact[]
+  sharedDocuments SharedDocument[]
+}
+
+model MatterContact {
+  id        String @id @default(cuid())
+  matterId  String
+  contactId String
+  role      String @default("Client")
+
+  matter  Matter  @relation(fields: [matterId], references: [id], onDelete: Cascade)
+  contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@unique([matterId, contactId])
+}
+
+model RelatedParty {
+  id       String  @id @default(cuid())
+  matterId String
+  name     String
+  role     String
+  email    String?
+  phone    String?
+  notes    String?
+
+  matter Matter @relation(fields: [matterId], references: [id], onDelete: Cascade)
+}
+
+// ============================================================================
+// BILLING & TRUST
+// ============================================================================
+
+model TimeEntry {
+  id          String   @id @default(cuid())
+  matterId    String
+  userId      String
+  date        DateTime
+  description String
+  duration    Float
+  rate        Float
+  isBilled    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  matter Matter @relation(fields: [matterId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id])
+}
+
+enum ExpenseType {
+  HardCost
+  SoftCost
+}
+
+model Expense {
+  id          String      @id @default(cuid())
+  matterId    String
+  date        DateTime
+  description String
+  amount      Float
+  type        ExpenseType
+  isBilled    Boolean     @default(false)
+  createdAt   DateTime    @default(now())
+
+  matter Matter @relation(fields: [matterId], references: [id], onDelete: Cascade)
+}
+
+enum InvoiceStatus {
+  Paid
+  Unpaid
+  Overdue
+}
+
+model Invoice {
+  id           String        @id @default(cuid())
+  matterId     String
+  issueDate    DateTime
+  dueDate      DateTime
+  amount       Float
+  status       InvoiceStatus @default(Unpaid)
+  balance      Float?
+  clientName   String?
+  lastSentDate DateTime?
+  createdAt    DateTime      @default(now())
+
+  matter Matter @relation(fields: [matterId], references: [id], onDelete: Cascade)
+}
+
+enum TransactionType {
+  Deposit
+  Payment
+  Transfer
+}
+
+enum LedgerType {
+  Operating
+  Trust
+}
+
+model Transaction {
+  id          String          @id @default(cuid())
+  matterId    String
+  date        DateTime
+  type        TransactionType
+  ledger      LedgerType
+  description String
+  amount      Float
+  fromAccount String?
+  toAccount   String?
+  createdAt   DateTime        @default(now())
+
+  matter Matter @relation(fields: [matterId], references: [id], onDelete: Cascade)
+}
+
+// ============================================================================
+// DOCUMENTS & FILES
+// ============================================================================
+
+model Document {
+  id                 String    @id @default(cuid())
+  matterId           String
+  name               String
+  category           String
+  filePath           String?
+  size               String    @default("0")
+  folder             String?
+  batesNumber        String?
+  isPrivileged       Boolean   @default(false)
+  privilegeReason    String?
+  exhibitNumber      String?
+  discoveryStatus    String?
+  sharedWithClient   Boolean   @default(false)
+  esignStatus        String?
+  esignRequestedDate DateTime?
+  esignCompletedDate DateTime?
+  esignRecipient     String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  matter          Matter            @relation(fields: [matterId], references: [id], onDelete: Cascade)
+  versions        DocumentVersion[]
+  sharedDocuments SharedDocument[]
+}
+
+model DocumentVersion {
+  id           String   @id @default(cuid())
+  documentId   String
+  version      Int
+  filePath     String
+  uploadedAt   DateTime @default(now())
+  uploadedById String
+
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  uploadedBy User     @relation(fields: [uploadedById], references: [id])
+}
+
+// ============================================================================
+// CALENDAR & TASKS
+// ============================================================================
+
+model Task {
+  id               String   @id @default(cuid())
+  matterId         String
+  description      String
+  notes            String?
+  dueDate          DateTime
+  completed        Boolean  @default(false)
+  priority         String   @default("Medium")
+  recurrence       String?
+  assignedUserId   String?
+  assignedByUserId String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  matter     Matter @relation(fields: [matterId], references: [id], onDelete: Cascade)
+  assignedTo User?  @relation("AssignedTo", fields: [assignedUserId], references: [id])
+  assignedBy User?  @relation("AssignedBy", fields: [assignedByUserId], references: [id])
+}
+
+model Event {
+  id                  String   @id @default(cuid())
+  title               String
+  date                DateTime
+  startTime           String
+  endTime             String
+  matterId            String
+  eventTypeId         String?
+  type                String
+  location            String   @default("")
+  calendarId          String?
+  allDay              Boolean  @default(false)
+  description         String?
+  recurrence          Json?
+  isRecurringInstance Boolean  @default(false)
+  recurringEventId    String?
+  attendees           Json?
+  reminders           Json?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  matter Matter @relation(fields: [matterId], references: [id], onDelete: Cascade)
+}
+
+// ============================================================================
+// COMMUNICATION
+// ============================================================================
+
+model Communication {
+  id           String   @id @default(cuid())
+  matterId     String
+  type         String
+  subject      String
+  date         DateTime
+  participants Json
+  summary      String   @default("")
+  createdAt    DateTime @default(now())
+
+  matter Matter @relation(fields: [matterId], references: [id], onDelete: Cascade)
+}
+
+// ============================================================================
+// AUDIT & COMPLIANCE
+// ============================================================================
+
+model AuditLog {
+  id           String   @id @default(cuid())
+  timestamp    DateTime @default(now())
+  userId       String
+  userName     String
+  action       String
+  entityType   String
+  entityId     String
+  entityName   String?
+  changes      Json?
+  ipAddress    String?
+  userAgent    String?
+  sessionId    String?
+  hash         String
+  previousHash String?
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([userId])
+  @@index([timestamp])
+}
+
+// ============================================================================
+// CLIENT PORTAL
+// ============================================================================
+
+model PortalMessage {
+  id        String    @id @default(cuid())
+  matterId  String
+  senderId  String
+  content   String
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  matter Matter @relation(fields: [matterId], references: [id], onDelete: Cascade)
+  sender User   @relation(fields: [senderId], references: [id])
+}
+
+model SharedDocument {
+  id         String    @id @default(cuid())
+  documentId String
+  contactId  String
+  sharedAt   DateTime  @default(now())
+  accessedAt DateTime?
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  contact  Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, contactId])
+}

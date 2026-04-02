@@ -29,3 +29,14 @@ dist-ssr
 .env
 .env.local
 Criminal Case Notebooks-CJW/
+
+# Server
+server/dist
+server/.env
+server/node_modules
+
+# Shared package
+packages/shared/dist
+
+# Docker
+.env
