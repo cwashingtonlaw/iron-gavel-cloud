@@ -1,5 +1,6 @@
 import { PrismaClient, UserRole, MatterStatus, BillingType, MatterPermission, ContactType, ExpenseType, InvoiceStatus, TransactionType, LedgerType } from '@prisma/client';
 import bcrypt from 'bcrypt';
+import crypto from 'crypto';
 
 const prisma = new PrismaClient();
 
