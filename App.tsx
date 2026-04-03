@@ -1,6 +1,7 @@
 import React, { Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { useStore } from './store/useStore';
+import { AuthProvider, useAuth } from './services/authContext';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import AIChatbot from './components/AIChatbot';
@@ -9,6 +10,7 @@ import { CommandPalette } from './components/CommandPalette';
 import Breadcrumbs from './components/Breadcrumbs';
 import { ToastContainer } from './components/Toast';
 import ErrorBoundary from './components/ErrorBoundary';
+import LoginPage from './components/LoginPage';
 
 // Lazy load page components
 const Dashboard = React.lazy(() => import('./components/Dashboard'));
@@ -100,17 +102,13 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   );
 };
 
-const App: React.FC = () => {
-  const { currentUser, setCurrentUser } = useStore();
+const AuthenticatedApp: React.FC = () => {
+  const { user } = useAuth();
 
-  // Simple mock login for client portal if needed, 
-  // but for now we assume the main app is for the firm user.
-  // If we need to support client portal, we'd check currentUser.role or similar.
-
-  if (currentUser.role === 'Client') {
+  if (user?.role === 'Client') {
     return (
       <Suspense fallback={<div className="flex items-center justify-center h-screen"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div></div>}>
-        <ClientPortal client={currentUser as any} onLogout={() => window.location.reload()} />
+        <ClientPortal client={user as any} onLogout={() => window.location.reload()} />
       </Suspense>
     );
   }
@@ -131,13 +129,11 @@ const App: React.FC = () => {
         <Route path="/bills" element={<Layout><Bills /></Layout>} />
         <Route path="/intake" element={<Layout><Intake /></Layout>} />
 
-        {/* Placeholder routes for new pages */}
         <Route path="/calendar" element={<Layout><Calendar /></Layout>} />
         <Route path="/reports" element={<Layout><Reports /></Layout>} />
         <Route path="/settings" element={<Layout><Settings /></Layout>} />
         <Route path="/workflows" element={<Layout><WorkflowsPage /></Layout>} />
 
-        {/* Phase 1-3 Advanced Feature Routes */}
         <Route path="/deadlines" element={<Layout><DeadlineCalculator /></Layout>} />
         <Route path="/audit" element={<Layout><AuditLog /></Layout>} />
         <Route path="/security" element={<Layout><SecuritySettings /></Layout>} />
@@ -152,5 +148,29 @@ const App: React.FC = () => {
     </Router>
   );
 };
+
+const AppGate: React.FC = () => {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-slate-100 dark:bg-slate-900">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <LoginPage />;
+  }
+
+  return <AuthenticatedApp />;
+};
+
+const App: React.FC = () => (
+  <AuthProvider>
+    <AppGate />
+  </AuthProvider>
+);
 
 export default App;

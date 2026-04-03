@@ -8,8 +8,22 @@ import {
   generateRefreshToken,
   verifyRefreshToken,
 } from './auth.service.js';
+import { authenticate } from '../middleware/authenticate.js';
 
 export const authRouter = Router();
+
+// GET /api/v1/auth/me — returns current user profile
+authRouter.get('/me', authenticate, async (req, res) => {
+  const user = await prisma.user.findUnique({
+    where: { id: req.user!.userId },
+    select: { id: true, email: true, name: true, role: true, defaultRate: true, avatarUrl: true },
+  });
+  if (!user) {
+    res.status(404).json({ error: 'User not found' });
+    return;
+  }
+  res.json(user);
+});
 
 const registerSchema = z.object({
   email: z.string().email(),
