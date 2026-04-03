@@ -1,5 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
+import path from 'path';
+import fs from 'fs';
+import os from 'os';
 import { app } from '../app.js';
 import { prisma } from '../lib/prisma.js';
 import { generateAccessToken } from '../auth/auth.service.js';
@@ -8,7 +11,13 @@ const adminToken = generateAccessToken({ userId: 'USER_DOCS_1', role: 'Admin' })
 let createdDocumentId: string;
 let testMatterId: string;
 
+// A small temporary PDF-like file for upload tests
+const testFilePath = path.join(os.tmpdir(), 'test-upload.pdf');
+
 beforeAll(async () => {
+  // Create a tiny test file
+  fs.writeFileSync(testFilePath, '%PDF-1.4 test content for iron-gavel upload');
+
   await prisma.user.upsert({
     where: { id: 'USER_DOCS_1' },
     update: {},
@@ -35,7 +44,13 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  if (testFilePath && fs.existsSync(testFilePath)) {
+    fs.unlinkSync(testFilePath);
+  }
   if (testMatterId) {
+    await prisma.documentVersion.deleteMany({
+      where: { document: { matterId: testMatterId } },
+    });
     await prisma.document.deleteMany({ where: { matterId: testMatterId } });
     await prisma.matter.deleteMany({ where: { id: testMatterId } });
   }
@@ -98,5 +113,114 @@ describe('Documents CRUD', () => {
 
     expect(res.status).toBe(200);
     createdDocumentId = '';
+  });
+});
+
+describe('File Upload (Task 2)', () => {
+  it('POST /api/v1/documents/upload — succeeds with valid file + matterId', async () => {
+    const res = await request(app)
+      .post('/api/v1/documents/upload')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .field('matterId', testMatterId)
+      .field('category', 'Police Reports')
+      .attach('file', testFilePath, 'test-upload.pdf');
+
+    expect(res.status).toBe(201);
+    expect(res.body.id).toBeDefined();
+    expect(res.body.matterId).toBe(testMatterId);
+    expect(res.body.name).toBe('test-upload.pdf');
+    expect(Array.isArray(res.body.versions)).toBe(true);
+    expect(res.body.versions.length).toBe(1);
+    expect(res.body.versions[0].version).toBe(1);
+  });
+
+  it('POST /api/v1/documents/upload — rejects without matterId', async () => {
+    const res = await request(app)
+      .post('/api/v1/documents/upload')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .attach('file', testFilePath, 'test-upload.pdf');
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/matterId/i);
+  });
+});
+
+describe('File Download (Task 3)', () => {
+  it('GET /api/v1/documents/:id/download — streams file content back', async () => {
+    // Upload first
+    const uploadRes = await request(app)
+      .post('/api/v1/documents/upload')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .field('matterId', testMatterId)
+      .field('category', 'Evidence')
+      .attach('file', testFilePath, 'download-test.pdf');
+
+    expect(uploadRes.status).toBe(201);
+    const docId = uploadRes.body.id;
+
+    // Download and verify content
+    const dlRes = await request(app)
+      .get(`/api/v1/documents/${docId}/download`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .buffer(true)
+      .parse((res, callback) => {
+        const chunks: Buffer[] = [];
+        res.on('data', (chunk: Buffer) => chunks.push(chunk));
+        res.on('end', () => callback(null, Buffer.concat(chunks).toString()));
+      });
+
+    expect(dlRes.status).toBe(200);
+    expect(dlRes.headers['content-type']).toMatch(/pdf/);
+    expect(dlRes.headers['content-disposition']).toMatch(/attachment/);
+    expect(dlRes.body).toContain('%PDF-1.4 test content');
+  });
+
+  it('GET /api/v1/documents/:nonexistent/download — returns 404', async () => {
+    const res = await request(app)
+      .get('/api/v1/documents/nonexistent-id-xyz/download')
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(res.status).toBe(404);
+  });
+});
+
+describe('Document Versioning (Task 4)', () => {
+  let versionDocId: string;
+
+  beforeAll(async () => {
+    // Upload initial version to get a document with v1
+    const uploadRes = await request(app)
+      .post('/api/v1/documents/upload')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .field('matterId', testMatterId)
+      .field('category', 'Motions')
+      .attach('file', testFilePath, 'motion-v1.pdf');
+
+    expect(uploadRes.status).toBe(201);
+    versionDocId = uploadRes.body.id;
+  });
+
+  it('POST /api/v1/documents/:id/versions — uploads v2 and returns 2-entry versions array', async () => {
+    const res = await request(app)
+      .post(`/api/v1/documents/${versionDocId}/versions`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .attach('file', testFilePath, 'motion-v2.pdf');
+
+    expect(res.status).toBe(201);
+    expect(Array.isArray(res.body.versions)).toBe(true);
+    expect(res.body.versions.length).toBe(2);
+    expect(res.body.versions[0].version).toBe(1);
+    expect(res.body.versions[1].version).toBe(2);
+  });
+
+  it('GET /api/v1/documents/:id/versions — returns versions array', async () => {
+    const res = await request(app)
+      .get(`/api/v1/documents/${versionDocId}/versions`)
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+    expect(res.body.length).toBeGreaterThanOrEqual(1);
+    expect(res.body[0].documentId).toBe(versionDocId);
   });
 });

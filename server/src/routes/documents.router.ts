@@ -1,9 +1,19 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
+import mime from 'mime-types';
 import { prisma } from '../lib/prisma.js';
 import { authenticate } from '../middleware/authenticate.js';
 import { authorize } from '../middleware/authorize.js';
 import { auditLog } from '../middleware/auditLog.js';
+import {
+  ensureDir,
+  getFilePath,
+  ALLOWED_EXTENSIONS,
+  MAX_FILE_SIZE,
+} from '../lib/storage.js';
 
 export const documentsRouter = Router();
 
@@ -24,6 +34,27 @@ const createSchema = z.object({
 
 const updateSchema = createSchema.partial();
 
+// Multer configuration — temp staging area before permanent placement
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: '/tmp/iron-gavel-uploads',
+    filename: (_req, file, cb) => {
+      const unique = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      cb(null, `${unique}${path.extname(file.originalname).toLowerCase()}`);
+    },
+  }),
+  limits: { fileSize: MAX_FILE_SIZE },
+  fileFilter: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (ALLOWED_EXTENSIONS.includes(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error(`File type not allowed: ${ext}`));
+    }
+  },
+});
+
+// 1. GET / — list documents
 documentsRouter.get('/', ...staff, async (req, res) => {
   const { matterId } = req.query;
   const documents = await prisma.document.findMany({
@@ -33,18 +64,7 @@ documentsRouter.get('/', ...staff, async (req, res) => {
   res.json(documents);
 });
 
-documentsRouter.get('/:id', ...staff, async (req, res) => {
-  const document = await prisma.document.findUnique({
-    where: { id: req.params.id },
-    include: { versions: true },
-  });
-  if (!document) {
-    res.status(404).json({ error: 'Document not found' });
-    return;
-  }
-  res.json(document);
-});
-
+// 2. POST / — create metadata record
 documentsRouter.post('/', ...staff, auditLog('CREATE', 'Document'), async (req, res) => {
   const parsed = createSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -57,6 +77,206 @@ documentsRouter.post('/', ...staff, auditLog('CREATE', 'Document'), async (req, 
   res.status(201).json(document);
 });
 
+// 3. POST /upload — upload a file and create Document + DocumentVersion records
+// MUST come before /:id routes so Express doesn't interpret "upload" as an id
+documentsRouter.post(
+  '/upload',
+  ...staff,
+  upload.single('file'),
+  async (req, res) => {
+    const { matterId, category } = req.body as { matterId?: string; category?: string };
+
+    if (!matterId) {
+      // Clean up temp file if it was saved
+      if (req.file) fs.unlink(req.file.path, () => {});
+      res.status(400).json({ error: 'matterId is required' });
+      return;
+    }
+
+    if (!req.file) {
+      res.status(400).json({ error: 'file is required' });
+      return;
+    }
+
+    const userId = (req as any).user?.userId ?? 'unknown';
+    const originalName = req.file.originalname;
+    const tempPath = req.file.path;
+    const fileSize = String(req.file.size);
+
+    // Create Document record first (we need the id for the file path)
+    const document = await prisma.document.create({
+      data: {
+        matterId,
+        name: originalName,
+        category: category ?? 'Uncategorized',
+        size: fileSize,
+      },
+    });
+
+    // Move file from temp to permanent storage
+    const permanentPath = getFilePath(matterId, document.id, 1, originalName);
+    ensureDir(path.dirname(permanentPath));
+    fs.renameSync(tempPath, permanentPath);
+
+    // Update document with filePath
+    await prisma.document.update({
+      where: { id: document.id },
+      data: { filePath: permanentPath },
+    });
+
+    // Create DocumentVersion record (version 1)
+    await prisma.documentVersion.create({
+      data: {
+        documentId: document.id,
+        version: 1,
+        filePath: permanentPath,
+        uploadedById: userId,
+      },
+    });
+
+    // Return document with versions
+    const result = await prisma.document.findUnique({
+      where: { id: document.id },
+      include: { versions: true },
+    });
+
+    res.status(201).json(result);
+  },
+);
+
+// 4. GET /:id — get single document
+documentsRouter.get('/:id', ...staff, async (req, res) => {
+  const document = await prisma.document.findUnique({
+    where: { id: req.params.id },
+    include: { versions: true },
+  });
+  if (!document) {
+    res.status(404).json({ error: 'Document not found' });
+    return;
+  }
+  res.json(document);
+});
+
+// 5. GET /:id/download — stream file to client
+documentsRouter.get('/:id/download', ...staff, async (req, res) => {
+  const document = await prisma.document.findUnique({
+    where: { id: req.params.id },
+    include: { versions: { orderBy: { version: 'desc' }, take: 1 } },
+  });
+
+  if (!document) {
+    res.status(404).json({ error: 'Document not found' });
+    return;
+  }
+
+  const latestVersion = document.versions[0];
+  if (!latestVersion) {
+    res.status(404).json({ error: 'No file version found for this document' });
+    return;
+  }
+
+  const filePath = latestVersion.filePath;
+  if (!fs.existsSync(filePath)) {
+    res.status(404).json({ error: 'File not found on disk' });
+    return;
+  }
+
+  const contentType = mime.lookup(filePath) || 'application/octet-stream';
+  res.setHeader('Content-Type', contentType);
+  res.setHeader(
+    'Content-Disposition',
+    `attachment; filename="${encodeURIComponent(document.name)}"`,
+  );
+
+  fs.createReadStream(filePath).pipe(res);
+});
+
+// 6. GET /:id/versions — list all versions
+documentsRouter.get('/:id/versions', ...staff, async (req, res) => {
+  const document = await prisma.document.findUnique({
+    where: { id: req.params.id },
+  });
+  if (!document) {
+    res.status(404).json({ error: 'Document not found' });
+    return;
+  }
+
+  const versions = await prisma.documentVersion.findMany({
+    where: { documentId: req.params.id },
+    orderBy: { version: 'asc' },
+  });
+
+  res.json(versions);
+});
+
+// 7. POST /:id/versions — upload a new version of an existing document
+documentsRouter.post(
+  '/:id/versions',
+  ...staff,
+  upload.single('file'),
+  async (req, res) => {
+    const document = await prisma.document.findUnique({
+      where: { id: req.params.id },
+    });
+
+    if (!document) {
+      if (req.file) fs.unlink(req.file.path, () => {});
+      res.status(404).json({ error: 'Document not found' });
+      return;
+    }
+
+    if (!req.file) {
+      res.status(400).json({ error: 'file is required' });
+      return;
+    }
+
+    const userId = (req as any).user?.userId ?? 'unknown';
+    const originalName = req.file.originalname;
+    const tempPath = req.file.path;
+    const fileSize = String(req.file.size);
+
+    // Find current max version and increment
+    const maxVersionRecord = await prisma.documentVersion.findFirst({
+      where: { documentId: document.id },
+      orderBy: { version: 'desc' },
+    });
+    const nextVersion = (maxVersionRecord?.version ?? 0) + 1;
+
+    // Move file to permanent versioned path
+    const permanentPath = getFilePath(document.matterId, document.id, nextVersion, originalName);
+    ensureDir(path.dirname(permanentPath));
+    fs.renameSync(tempPath, permanentPath);
+
+    // Create new version record
+    await prisma.documentVersion.create({
+      data: {
+        documentId: document.id,
+        version: nextVersion,
+        filePath: permanentPath,
+        uploadedById: userId,
+      },
+    });
+
+    // Update document name, size, and filePath to reflect new version
+    await prisma.document.update({
+      where: { id: document.id },
+      data: {
+        name: originalName,
+        size: fileSize,
+        filePath: permanentPath,
+      },
+    });
+
+    const result = await prisma.document.findUnique({
+      where: { id: document.id },
+      include: { versions: { orderBy: { version: 'asc' } } },
+    });
+
+    res.status(201).json(result);
+  },
+);
+
+// 9. PUT /:id — update metadata
 documentsRouter.put('/:id', ...staff, auditLog('UPDATE', 'Document'), async (req, res) => {
   const parsed = updateSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -75,6 +295,7 @@ documentsRouter.put('/:id', ...staff, auditLog('UPDATE', 'Document'), async (req
   res.json(document);
 });
 
+// 6. DELETE /:id
 documentsRouter.delete('/:id', ...staff, auditLog('DELETE', 'Document'), async (req, res) => {
   const existing = await prisma.document.findUnique({ where: { id: req.params.id } });
   if (!existing) {
