@@ -9,8 +9,35 @@ import {
   verifyRefreshToken,
 } from './auth.service.js';
 import { authenticate } from '../middleware/authenticate.js';
+import { authorize } from '../middleware/authorize.js';
 
 export const authRouter = Router();
+
+// POST /auth/invite-client — admin/attorney invites a client
+authRouter.post('/invite-client', authenticate, authorize('Admin', 'Attorney'), async (req, res) => {
+  const { email, name, contactId } = req.body;
+  if (!email || !name) { res.status(400).json({ error: 'email and name required' }); return; }
+
+  const existing = await prisma.user.findUnique({ where: { email } });
+  if (existing) { res.status(409).json({ error: 'User already exists' }); return; }
+
+  const tempPassword = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+  const passwordHash = await hashPassword(tempPassword);
+
+  const user = await prisma.user.create({
+    data: { email, passwordHash, name, role: 'Client' },
+  });
+
+  // Link contact to portal if contactId provided
+  if (contactId) {
+    await prisma.contact.update({
+      where: { id: contactId },
+      data: { hasPortalAccess: true },
+    }).catch(() => {});
+  }
+
+  res.status(201).json({ user: { id: user.id, email, name, role: 'Client' }, tempPassword });
+});
 
 // GET /api/v1/auth/me — returns current user profile
 authRouter.get('/me', authenticate, async (req, res) => {

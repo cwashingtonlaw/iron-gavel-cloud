@@ -9,6 +9,7 @@ import { expensesRouter } from './expenses.router.js';
 import { invoicesRouter } from './invoices.router.js';
 import { transactionsRouter, trustRouter } from './transactions.router.js';
 import { documentsRouter } from './documents.router.js';
+import { portalRouter } from './portal.router.js';
 
 export const apiRouter = Router();
 
@@ -23,3 +24,4 @@ apiRouter.use('/invoices', invoicesRouter);
 apiRouter.use('/transactions', transactionsRouter);
 apiRouter.use('/trust', trustRouter);
 apiRouter.use('/documents', documentsRouter);
+apiRouter.use('/portal', portalRouter);
