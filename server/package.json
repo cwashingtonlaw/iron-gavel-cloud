@@ -15,6 +15,7 @@
     "db:studio": "prisma studio"
   },
   "dependencies": {
+    "@google/genai": "^1.48.0",
     "@iron-gavel/shared": "*",
     "@prisma/client": "^6.6.0",
     "bcrypt": "^6.0.0",

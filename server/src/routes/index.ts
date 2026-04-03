@@ -10,6 +10,7 @@ import { invoicesRouter } from './invoices.router.js';
 import { transactionsRouter, trustRouter } from './transactions.router.js';
 import { documentsRouter } from './documents.router.js';
 import { portalRouter } from './portal.router.js';
+import { aiRouter } from './ai.router.js';
 
 export const apiRouter = Router();
 
@@ -25,3 +26,4 @@ apiRouter.use('/transactions', transactionsRouter);
 apiRouter.use('/trust', trustRouter);
 apiRouter.use('/documents', documentsRouter);
 apiRouter.use('/portal', portalRouter);
+apiRouter.use('/ai', aiRouter);
