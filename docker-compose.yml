@@ -1,0 +1,54 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: iron-gavel-db
+    environment:
+      POSTGRES_USER: irongavel
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-irongavel}
+      POSTGRES_DB: irongavel
+      POSTGRES_HOST_AUTH_METHOD: trust
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U irongavel"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  server:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    container_name: iron-gavel-api
+    environment:
+      DATABASE_URL: postgresql://irongavel:${DB_PASSWORD:-irongavel}@db:5432/irongavel?schema=public
+      PORT: 4000
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+    ports:
+      - "4000:4000"
+    volumes:
+      - filedata:/data/iron-gavel/files
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+    container_name: iron-gavel-web
+    ports:
+      - "3000:80"
+    depends_on:
+      - server
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  filedata:
