@@ -1,6 +1,7 @@
 import express from 'express';
 import cookieParser from 'cookie-parser';
 import { authRouter } from './auth/auth.router.js';
+import { apiRouter } from './routes/index.js';
 
 export const app = express();
 
@@ -12,3 +13,4 @@ app.get('/api/v1/health', (_req, res) => {
 });
 
 app.use('/api/v1/auth', authRouter);
+app.use('/api/v1', apiRouter);
