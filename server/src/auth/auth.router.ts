@@ -10,6 +10,7 @@ import {
 } from './auth.service.js';
 import { authenticate } from '../middleware/authenticate.js';
 import { authorize } from '../middleware/authorize.js';
+import * as OTPAuth from 'otpauth';
 
 export const authRouter = Router();
 
@@ -193,4 +194,49 @@ authRouter.post('/logout', async (req, res) => {
 
   res.clearCookie('refreshToken', { path: '/api/v1/auth' });
   res.json({ message: 'Logged out' });
+});
+
+// POST /auth/2fa/setup — generate TOTP secret
+authRouter.post('/2fa/setup', authenticate, async (req, res) => {
+  const totp = new OTPAuth.TOTP({
+    issuer: 'Iron Gavel',
+    label: req.user!.userId,
+    algorithm: 'SHA1',
+    digits: 6,
+    period: 30,
+  });
+
+  const secret = totp.secret.base32;
+
+  await prisma.twoFactorAuth.upsert({
+    where: { userId: req.user!.userId },
+    update: { secret, method: 'Authenticator App', enabled: false },
+    create: { userId: req.user!.userId, secret, method: 'Authenticator App', enabled: false },
+  });
+
+  res.json({ secret, otpauthUrl: totp.toString() });
+});
+
+// POST /auth/2fa/verify — verify TOTP code and enable 2FA
+authRouter.post('/2fa/verify', authenticate, async (req, res) => {
+  const { code } = req.body;
+  if (!code) { res.status(400).json({ error: 'code required' }); return; }
+
+  const tfa = await prisma.twoFactorAuth.findUnique({ where: { userId: req.user!.userId } });
+  if (!tfa?.secret) { res.status(400).json({ error: '2FA not set up' }); return; }
+
+  const totp = new OTPAuth.TOTP({
+    issuer: 'Iron Gavel',
+    label: req.user!.userId,
+    algorithm: 'SHA1',
+    digits: 6,
+    period: 30,
+    secret: OTPAuth.Secret.fromBase32(tfa.secret),
+  });
+
+  const valid = totp.validate({ token: code, window: 1 }) !== null;
+  if (!valid) { res.status(401).json({ error: 'Invalid code' }); return; }
+
+  await prisma.twoFactorAuth.update({ where: { userId: req.user!.userId }, data: { enabled: true } });
+  res.json({ enabled: true });
 });
