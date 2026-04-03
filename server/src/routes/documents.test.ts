@@ -183,3 +183,44 @@ describe('File Download (Task 3)', () => {
     expect(res.status).toBe(404);
   });
 });
+
+describe('Document Versioning (Task 4)', () => {
+  let versionDocId: string;
+
+  beforeAll(async () => {
+    // Upload initial version to get a document with v1
+    const uploadRes = await request(app)
+      .post('/api/v1/documents/upload')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .field('matterId', testMatterId)
+      .field('category', 'Motions')
+      .attach('file', testFilePath, 'motion-v1.pdf');
+
+    expect(uploadRes.status).toBe(201);
+    versionDocId = uploadRes.body.id;
+  });
+
+  it('POST /api/v1/documents/:id/versions — uploads v2 and returns 2-entry versions array', async () => {
+    const res = await request(app)
+      .post(`/api/v1/documents/${versionDocId}/versions`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .attach('file', testFilePath, 'motion-v2.pdf');
+
+    expect(res.status).toBe(201);
+    expect(Array.isArray(res.body.versions)).toBe(true);
+    expect(res.body.versions.length).toBe(2);
+    expect(res.body.versions[0].version).toBe(1);
+    expect(res.body.versions[1].version).toBe(2);
+  });
+
+  it('GET /api/v1/documents/:id/versions — returns versions array', async () => {
+    const res = await request(app)
+      .get(`/api/v1/documents/${versionDocId}/versions`)
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+    expect(res.body.length).toBeGreaterThanOrEqual(1);
+    expect(res.body[0].documentId).toBe(versionDocId);
+  });
+});

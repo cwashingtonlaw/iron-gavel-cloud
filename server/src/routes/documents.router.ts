@@ -191,7 +191,92 @@ documentsRouter.get('/:id/download', ...staff, async (req, res) => {
   fs.createReadStream(filePath).pipe(res);
 });
 
-// 6. PUT /:id — update metadata
+// 6. GET /:id/versions — list all versions
+documentsRouter.get('/:id/versions', ...staff, async (req, res) => {
+  const document = await prisma.document.findUnique({
+    where: { id: req.params.id },
+  });
+  if (!document) {
+    res.status(404).json({ error: 'Document not found' });
+    return;
+  }
+
+  const versions = await prisma.documentVersion.findMany({
+    where: { documentId: req.params.id },
+    orderBy: { version: 'asc' },
+  });
+
+  res.json(versions);
+});
+
+// 7. POST /:id/versions — upload a new version of an existing document
+documentsRouter.post(
+  '/:id/versions',
+  ...staff,
+  upload.single('file'),
+  async (req, res) => {
+    const document = await prisma.document.findUnique({
+      where: { id: req.params.id },
+    });
+
+    if (!document) {
+      if (req.file) fs.unlink(req.file.path, () => {});
+      res.status(404).json({ error: 'Document not found' });
+      return;
+    }
+
+    if (!req.file) {
+      res.status(400).json({ error: 'file is required' });
+      return;
+    }
+
+    const userId = (req as any).user?.userId ?? 'unknown';
+    const originalName = req.file.originalname;
+    const tempPath = req.file.path;
+    const fileSize = String(req.file.size);
+
+    // Find current max version and increment
+    const maxVersionRecord = await prisma.documentVersion.findFirst({
+      where: { documentId: document.id },
+      orderBy: { version: 'desc' },
+    });
+    const nextVersion = (maxVersionRecord?.version ?? 0) + 1;
+
+    // Move file to permanent versioned path
+    const permanentPath = getFilePath(document.matterId, document.id, nextVersion, originalName);
+    ensureDir(path.dirname(permanentPath));
+    fs.renameSync(tempPath, permanentPath);
+
+    // Create new version record
+    await prisma.documentVersion.create({
+      data: {
+        documentId: document.id,
+        version: nextVersion,
+        filePath: permanentPath,
+        uploadedById: userId,
+      },
+    });
+
+    // Update document name, size, and filePath to reflect new version
+    await prisma.document.update({
+      where: { id: document.id },
+      data: {
+        name: originalName,
+        size: fileSize,
+        filePath: permanentPath,
+      },
+    });
+
+    const result = await prisma.document.findUnique({
+      where: { id: document.id },
+      include: { versions: { orderBy: { version: 'asc' } } },
+    });
+
+    res.status(201).json(result);
+  },
+);
+
+// 9. PUT /:id — update metadata
 documentsRouter.put('/:id', ...staff, auditLog('UPDATE', 'Document'), async (req, res) => {
   const parsed = updateSchema.safeParse(req.body);
   if (!parsed.success) {
