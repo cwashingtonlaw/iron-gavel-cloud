@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useStore } from '../store/useStore';
+import { api } from '../services/api';
 import { TimeEntry, Invoice, Expense, Transaction, Matter } from '../types';
 import {
     PlusIcon, ClockIcon, PaintBrushIcon, CurrencyDollarIcon, BanknotesIcon,
@@ -62,10 +63,19 @@ const Billing: React.FC = () => {
 
     // Store selectors
     const matters = useStore(s => s.matters);
-    const timeEntries = useStore(s => s.timeEntries);
-    const expenses = useStore(s => s.expenses);
-    const invoices = useStore(s => s.invoices);
     const transactions = useStore(s => s.transactions);
+    const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
+    const [expenses, setExpenses] = useState<Expense[]>([]);
+    const [invoices, setInvoices] = useState<Invoice[]>([]);
+    const [billingLoading, setBillingLoading] = useState(true);
+
+    useEffect(() => {
+        Promise.all([
+            api.get('/time-entries').then(setTimeEntries),
+            api.get('/expenses').then(setExpenses),
+            api.get('/invoices').then(setInvoices),
+        ]).catch(console.error).finally(() => setBillingLoading(false));
+    }, []);
     const currentUser = useStore(s => s.currentUser);
     const addTimeEntry = useStore(s => s.addTimeEntry);
     const deleteTimeEntry = useStore(s => s.deleteTimeEntry);

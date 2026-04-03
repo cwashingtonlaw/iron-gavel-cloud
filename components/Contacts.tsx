@@ -1,6 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Contact } from '../types';
 import { useStore } from '../store/useStore';
+import { api } from '../services/api';
 import {
   PlusIcon, MagnifyingGlassIcon, FunnelIcon, ArrowDownTrayIcon,
   UserCircleIcon, BuildingOfficeIcon, PhoneIcon, EnvelopeIcon,
@@ -10,7 +11,18 @@ import {
 import AddContactModal from './AddContactModal';
 
 const Contacts: React.FC = () => {
-  const { contacts, addContact, updateContact, deleteContact, matters } = useStore();
+  const { addContact, updateContact, deleteContact } = useStore();
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [matters, setMatters] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api.get('/contacts').then(setContacts).catch(console.error).finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    api.get('/matters').then(setMatters).catch(console.error);
+  }, []);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
