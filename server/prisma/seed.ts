@@ -1,11 +1,10 @@
 import { PrismaClient, UserRole, MatterStatus, BillingType, MatterPermission, ContactType, ExpenseType, InvoiceStatus, TransactionType, LedgerType } from '@prisma/client';
-import crypto from 'crypto';
+import bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
 
-function hashPassword(password: string): string {
-  // Placeholder — Plan 1B will replace with bcrypt
-  return crypto.createHash('sha256').update(password).digest('hex');
+async function hashPassword(password: string): Promise<string> {
+  return bcrypt.hash(password, 12);
 }
 
 async function main() {
@@ -16,7 +15,7 @@ async function main() {
     data: {
       id: 'USER_1',
       email: 'christopher.washington@greatelephantlaw.com',
-      passwordHash: hashPassword('admin123'),
+      passwordHash: await hashPassword('admin123'),
       name: 'Christopher Washington',
       role: UserRole.Admin,
       defaultRate: 350,
@@ -28,7 +27,7 @@ async function main() {
     data: {
       id: 'USER_2',
       email: 'rozshelle@greatelephantlaw.com',
-      passwordHash: hashPassword('attorney123'),
+      passwordHash: await hashPassword('attorney123'),
       name: 'Rozshelle Laher',
       role: UserRole.Attorney,
       defaultRate: 300,
@@ -39,7 +38,7 @@ async function main() {
     data: {
       id: 'USER_3',
       email: 'riza@greatelephantlaw.com',
-      passwordHash: hashPassword('paralegal123'),
+      passwordHash: await hashPassword('paralegal123'),
       name: 'Riza Fortes',
       role: UserRole.Paralegal,
       defaultRate: 150,
