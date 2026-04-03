@@ -87,6 +87,67 @@ invoicesRouter.put('/:id', ...staff, auditLog('UPDATE', 'Invoice'), async (req, 
   res.json(invoice);
 });
 
+// POST /api/v1/invoices/generate — auto-generate invoice from unbilled time + expenses
+invoicesRouter.post('/generate', ...staff, auditLog('CREATE', 'Invoice'), async (req, res) => {
+  const { matterId } = req.body;
+  if (!matterId) {
+    res.status(400).json({ error: 'matterId is required' });
+    return;
+  }
+
+  const matter = await prisma.matter.findUnique({ where: { id: matterId } });
+  if (!matter) {
+    res.status(404).json({ error: 'Matter not found' });
+    return;
+  }
+
+  const unbilledTime = await prisma.timeEntry.findMany({
+    where: { matterId, isBilled: false },
+  });
+  const unbilledExpenses = await prisma.expense.findMany({
+    where: { matterId, isBilled: false },
+  });
+
+  const timeTotal = unbilledTime.reduce((sum, t) => sum + t.duration * t.rate, 0);
+  const expenseTotal = unbilledExpenses.reduce((sum, e) => sum + e.amount, 0);
+  const total = timeTotal + expenseTotal;
+
+  if (total === 0) {
+    res.status(400).json({ error: 'No unbilled time or expenses to invoice' });
+    return;
+  }
+
+  const invoice = await prisma.invoice.create({
+    data: {
+      matterId,
+      issueDate: new Date(),
+      dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+      amount: total,
+      balance: total,
+      clientName: matter.client,
+      status: 'Unpaid',
+    },
+  });
+
+  // Mark everything as billed
+  await prisma.timeEntry.updateMany({
+    where: { id: { in: unbilledTime.map(t => t.id) } },
+    data: { isBilled: true },
+  });
+  await prisma.expense.updateMany({
+    where: { id: { in: unbilledExpenses.map(e => e.id) } },
+    data: { isBilled: true },
+  });
+
+  res.status(201).json({
+    ...invoice,
+    timeEntries: unbilledTime.length,
+    expenses: unbilledExpenses.length,
+    timeTotal,
+    expenseTotal,
+  });
+});
+
 invoicesRouter.delete('/:id', ...staff, auditLog('DELETE', 'Invoice'), async (req, res) => {
   const existing = await prisma.invoice.findUnique({ where: { id: req.params.id } });
   if (!existing) {

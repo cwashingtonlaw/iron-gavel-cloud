@@ -96,6 +96,30 @@ transactionsRouter.delete('/:id', ...staff, auditLog('DELETE', 'Transaction'), a
   res.json({ message: 'Transaction deleted' });
 });
 
+// POST /trust/reconcile — 3-way IOLTA reconciliation
+trustRouter.post('/reconcile', ...staff, async (req, res) => {
+  const { matterId, bankBalance } = req.body;
+  if (!matterId || bankBalance === undefined) {
+    res.status(400).json({ error: 'matterId and bankBalance are required' });
+    return;
+  }
+
+  const transactions = await prisma.transaction.findMany({
+    where: { matterId, ledger: 'Trust' },
+  });
+
+  const bookBalance = transactions.reduce((sum, t) => {
+    if (t.type === 'Deposit') return sum + t.amount;
+    if (t.type === 'Payment') return sum - t.amount;
+    return sum;
+  }, 0);
+
+  const difference = bankBalance - bookBalance;
+  const status = Math.abs(difference) < 0.01 ? 'Balanced' : 'Discrepancy';
+
+  res.json({ matterId, bankBalance, bookBalance, difference, status });
+});
+
 // Trust balance endpoint — mounted at /trust/:matterId/balance via trustRouter
 trustRouter.get('/:matterId/balance', ...staff, async (req, res) => {
   const transactions = await prisma.transaction.findMany({
