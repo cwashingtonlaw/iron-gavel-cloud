@@ -157,7 +157,41 @@ documentsRouter.get('/:id', ...staff, async (req, res) => {
   res.json(document);
 });
 
-// 5. PUT /:id — update metadata
+// 5. GET /:id/download — stream file to client
+documentsRouter.get('/:id/download', ...staff, async (req, res) => {
+  const document = await prisma.document.findUnique({
+    where: { id: req.params.id },
+    include: { versions: { orderBy: { version: 'desc' }, take: 1 } },
+  });
+
+  if (!document) {
+    res.status(404).json({ error: 'Document not found' });
+    return;
+  }
+
+  const latestVersion = document.versions[0];
+  if (!latestVersion) {
+    res.status(404).json({ error: 'No file version found for this document' });
+    return;
+  }
+
+  const filePath = latestVersion.filePath;
+  if (!fs.existsSync(filePath)) {
+    res.status(404).json({ error: 'File not found on disk' });
+    return;
+  }
+
+  const contentType = mime.lookup(filePath) || 'application/octet-stream';
+  res.setHeader('Content-Type', contentType);
+  res.setHeader(
+    'Content-Disposition',
+    `attachment; filename="${encodeURIComponent(document.name)}"`,
+  );
+
+  fs.createReadStream(filePath).pipe(res);
+});
+
+// 6. PUT /:id — update metadata
 documentsRouter.put('/:id', ...staff, auditLog('UPDATE', 'Document'), async (req, res) => {
   const parsed = updateSchema.safeParse(req.body);
   if (!parsed.success) {

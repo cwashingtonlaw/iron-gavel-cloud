@@ -144,3 +144,42 @@ describe('File Upload (Task 2)', () => {
     expect(res.body.error).toMatch(/matterId/i);
   });
 });
+
+describe('File Download (Task 3)', () => {
+  it('GET /api/v1/documents/:id/download — streams file content back', async () => {
+    // Upload first
+    const uploadRes = await request(app)
+      .post('/api/v1/documents/upload')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .field('matterId', testMatterId)
+      .field('category', 'Evidence')
+      .attach('file', testFilePath, 'download-test.pdf');
+
+    expect(uploadRes.status).toBe(201);
+    const docId = uploadRes.body.id;
+
+    // Download and verify content
+    const dlRes = await request(app)
+      .get(`/api/v1/documents/${docId}/download`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .buffer(true)
+      .parse((res, callback) => {
+        const chunks: Buffer[] = [];
+        res.on('data', (chunk: Buffer) => chunks.push(chunk));
+        res.on('end', () => callback(null, Buffer.concat(chunks).toString()));
+      });
+
+    expect(dlRes.status).toBe(200);
+    expect(dlRes.headers['content-type']).toMatch(/pdf/);
+    expect(dlRes.headers['content-disposition']).toMatch(/attachment/);
+    expect(dlRes.body).toContain('%PDF-1.4 test content');
+  });
+
+  it('GET /api/v1/documents/:nonexistent/download — returns 404', async () => {
+    const res = await request(app)
+      .get('/api/v1/documents/nonexistent-id-xyz/download')
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(res.status).toBe(404);
+  });
+});
