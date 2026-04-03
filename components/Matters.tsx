@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Matter, Contact } from '../types';
 import { useStore } from '../store/useStore';
+import { api } from '../services/api';
 import { MOCK_USERS } from '../constants';
 import {
     PlusIcon, MagnifyingGlassIcon, FunnelIcon, EllipsisHorizontalIcon,
@@ -26,16 +27,21 @@ interface MattersProps {
 
 const Matters: React.FC<MattersProps> = ({ filters }) => {
     const navigate = useNavigate();
-    const { matters, pipelines, addMatter, updateMatter, deleteMatter, contacts, updateContact, addToast } = useStore();
+    const { pipelines, addMatter, updateMatter, deleteMatter, updateContact, addToast } = useStore();
+    const [matters, setMatters] = useState<Matter[]>([]);
+    const [contacts, setContacts] = useState<Contact[]>([]);
     const [viewMode, setViewMode] = useState<'Board' | 'List' | 'Timeline'>('Board');
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedPipelineId, setSelectedPipelineId] = useState<string>(pipelines[0]?.id || '');
     const [isAddMatterModalOpen, setIsAddMatterModalOpen] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
 
-    React.useEffect(() => {
-        const timer = setTimeout(() => setIsLoading(false), 1000);
-        return () => clearTimeout(timer);
+    useEffect(() => {
+        api.get('/matters').then(setMatters).catch(console.error).finally(() => setIsLoading(false));
+    }, []);
+
+    useEffect(() => {
+        api.get('/contacts').then(setContacts).catch(console.error);
     }, []);
 
     // Summary Modal State

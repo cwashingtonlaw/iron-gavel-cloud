@@ -1,5 +1,6 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { MOCK_DOCUMENT_TEMPLATES, MOCK_DOCUMENT_CATEGORIES } from '../constants';
+import { api } from '../services/api';
 import {
   PlusIcon, DocumentTextIcon, MagnifyingGlassIcon, XMarkIcon, FolderIcon,
   TrashIcon, ArrowDownTrayIcon, EyeIcon, PencilSquareIcon, CheckCircleIcon,
@@ -338,7 +339,13 @@ const DetailPanel: React.FC<{
 // MAIN COMPONENT
 // ============================================================================
 const Documents: React.FC = () => {
-  const { documents, addDocument, deleteDocument, updateDocument, matters } = useStore();
+  const { addDocument, deleteDocument, updateDocument, matters } = useStore();
+  const [documents, setDocuments] = useState<Document[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api.get('/documents').then(setDocuments).catch(console.error).finally(() => setLoading(false));
+  }, []);
 
   // --- Tab State ---
   const [activeTab, setActiveTab] = useState<TabId>('all');

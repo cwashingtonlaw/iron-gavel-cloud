@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { MOCK_USERS } from '../constants';
 import { Task } from '../types';
 import { PlusIcon, ExclamationTriangleIcon, ArrowDownTrayIcon } from './icons';
 import TaskModal from './TaskModal';
 import { useStore } from '../store/useStore';
+import { api } from '../services/api';
 import EmptyState from './EmptyState';
 
 interface TasksProps {
@@ -11,7 +12,13 @@ interface TasksProps {
 }
 
 const Tasks: React.FC<TasksProps> = ({ filters }) => {
-  const { tasks, addTask, updateTask, matters, addToast } = useStore();
+  const { addTask, updateTask, matters, addToast } = useStore();
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api.get('/tasks').then(setTasks).catch(console.error).finally(() => setLoading(false));
+  }, []);
   const [activeTab, setActiveTab] = useState<'Outstanding' | 'Completed'>('Outstanding');
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
