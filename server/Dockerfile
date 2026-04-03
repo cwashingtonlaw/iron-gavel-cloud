@@ -3,7 +3,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 COPY server/package.json ./server/
 COPY packages/shared/package.json ./packages/shared/
-RUN npm ci --workspace=@iron-gavel/server --workspace=@iron-gavel/shared
+RUN npm install --workspace=@iron-gavel/server --workspace=@iron-gavel/shared
 COPY packages/shared/ ./packages/shared/
 COPY server/ ./server/
 RUN npm run build --workspace=@iron-gavel/shared
