@@ -5,6 +5,7 @@ import { tasksRouter } from './tasks.router.js';
 import { eventsRouter } from './events.router.js';
 import { communicationsRouter } from './communications.router.js';
 import { timeEntriesRouter } from './timeEntries.router.js';
+import { expensesRouter } from './expenses.router.js';
 
 export const apiRouter = Router();
 
@@ -14,3 +15,4 @@ apiRouter.use('/tasks', tasksRouter);
 apiRouter.use('/events', eventsRouter);
 apiRouter.use('/communications', communicationsRouter);
 apiRouter.use('/time-entries', timeEntriesRouter);
+apiRouter.use('/expenses', expensesRouter);
