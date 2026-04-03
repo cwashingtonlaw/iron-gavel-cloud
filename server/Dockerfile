@@ -14,11 +14,11 @@ FROM node:20-alpine
 WORKDIR /app
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/server/dist ./server/dist
-COPY --from=build /app/server/node_modules ./server/node_modules
 COPY --from=build /app/server/prisma ./server/prisma
 COPY --from=build /app/server/package.json ./server/
 COPY --from=build /app/packages/shared/dist ./packages/shared/dist
 COPY --from=build /app/packages/shared/package.json ./packages/shared/
+COPY --from=build /app/package.json ./
 EXPOSE 4000
 WORKDIR /app/server
 CMD ["sh", "-c", "npx prisma migrate deploy && node dist/index.js"]
