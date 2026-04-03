@@ -11,6 +11,8 @@ import { transactionsRouter, trustRouter } from './transactions.router.js';
 import { documentsRouter } from './documents.router.js';
 import { portalRouter } from './portal.router.js';
 import { aiRouter } from './ai.router.js';
+import { searchRouter } from './search.router.js';
+import { adminRouter } from './admin.router.js';
 
 export const apiRouter = Router();
 
@@ -27,3 +29,5 @@ apiRouter.use('/trust', trustRouter);
 apiRouter.use('/documents', documentsRouter);
 apiRouter.use('/portal', portalRouter);
 apiRouter.use('/ai', aiRouter);
+apiRouter.use('/search', searchRouter);
+apiRouter.use('/admin', adminRouter);
